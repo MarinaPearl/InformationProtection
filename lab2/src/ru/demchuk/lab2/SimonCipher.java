@@ -1,142 +1,190 @@
 package ru.demchuk.lab2;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.math.BigInteger;
+import javax.swing.text.Utilities;
+import java.util.Arrays;
 
-public class SimonCipher {
-    private static final long MASK = 0xFFFFFFFFFFFFFFFFL;
-    private static final int[] Z = {0x9, 0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1, 0x0};
-    private static final int[] SIGMA = {0xB, 0xE, 0xE, 0x9};
-
-    private long[] key;
-    private int rounds;
-
-    public SimonCipher(BigInteger key, int rounds) {
-        this.key = expandKey(key, rounds);
-        this.rounds = rounds;
+class SimonCipher{
+    Utilities.PKCS5Padding pad;
+    private final byte[][] z;
+    private int sizeBits;
+    private int sizeBytes;
+    private byte[] input;
+    private byte[] encryted;
+    private byte[] keyInitial;
+    private int keyWords;
+    private int zi=0;
+    private int r=0;
+    private long[] keys;
+    private long c;
+    private long mask;
+    SimonCipher() {
+        pad=new Utilities.PKCS5Padding();
+        z = new byte[][] {
+                {01, 01, 01, 01, 01, 00, 01, 00, 00, 00, 01, 00, 00, 01, 00, 01, 00, 01, 01, 00, 00, 00, 00, 01, 01, 01, 00, 00, 01, 01, 00, 01, 01, 01, 01, 01, 00, 01, 00, 00, 00, 01, 00, 00, 01, 00, 01, 00, 01, 01, 00, 00, 00, 00, 01, 01, 01, 00, 00, 01, 01, 00, },
+                {01, 00, 00, 00, 01, 01, 01, 00, 01, 01, 01, 01, 01, 00, 00, 01, 00, 00, 01, 01, 00, 00, 00, 00, 01, 00, 01, 01, 00, 01, 00, 01, 00, 00, 00, 01, 01, 01, 00, 01, 01, 01, 01, 01, 00, 00, 01, 00, 00, 01, 01, 00, 00, 00, 00, 01, 00, 01, 01, 00, 01, 00, },
+                {01, 00, 01, 00, 01, 01, 01, 01, 00, 01, 01, 01, 00, 00, 00, 00, 00, 00, 01, 01, 00, 01, 00, 00, 01, 00, 00, 01, 01, 00, 00, 00, 01, 00, 01, 00, 00, 00, 00, 01, 00, 00, 00, 01, 01, 01, 01, 01, 01, 00, 00, 01, 00, 01, 01, 00, 01, 01, 00, 00, 01, 01, },
+                {01, 01, 00, 01, 01, 00, 01, 01, 01, 00, 01, 00, 01, 01, 00, 00, 00, 01, 01, 00, 00, 01, 00, 01, 01, 01, 01, 00, 00, 00, 00, 00, 00, 01, 00, 00, 01, 00, 00, 00, 01, 00, 01, 00, 00, 01, 01, 01, 00, 00, 01, 01, 00, 01, 00, 00, 00, 00, 01, 01, 01, 01, },
+                {01, 01, 00, 01, 00, 00, 00, 01, 01, 01, 01, 00, 00, 01, 01, 00, 01, 00, 01, 01, 00, 01, 01, 00, 00, 00, 01, 00, 00, 00, 00, 00, 00, 01, 00, 01, 01, 01, 00, 00, 00, 00, 01, 01, 00, 00, 01, 00, 01, 00, 00, 01, 00, 00, 01, 01, 01, 00, 01, 01, 01, 01, }
+        };
     }
-
-    private long[] expandKey(BigInteger key, int rounds) {
-        long[] keyWords = new long[rounds];
-        long mask = 0xFFFFFFFFFFFFFFFFL;
-
-        for (int i = 0; i < rounds; i++) {
-            keyWords[i] = key.shiftRight((rounds - 1 - i) * 64).and(BigInteger.valueOf(mask)).longValue();
+    void initialize(byte[] input,int blockSize,byte[] key,int mode)throws IllegalArgumentException{
+        this.sizeBits=blockSize;
+        sizeBytes=sizeBits/8;
+        pad.initialize(sizeBytes);
+        keyInitial=key;
+        keyWords=(key.length*2)/sizeBytes;
+        boolean flag=((key.length*2)%sizeBytes==0);
+        switch (sizeBits){
+            case 32:
+                mask=0x000000000000FFFFL;
+                if(keyWords!=4||!flag){
+                    throw new IllegalArgumentException();
+                }else{
+                    r=32;
+                    zi=-2;
+                }
+                break;
+            case 48:
+                mask=0x0000000000FFFFFFL;
+                if(flag) {
+                    if (keyWords == 3) {
+                        r = 36;
+                        zi = -1;
+                    } else if (keyWords == 4) {
+                        r = 36;
+                        zi = -1;
+                    } else {
+                        throw new IllegalArgumentException();
+                    }
+                }else{
+                    throw new IllegalArgumentException();
+                }
+                break;
+            case 64:
+                mask=0x00000000FFFFFFFFL;
+                if(flag) {
+                    if (keyWords == 3) {
+                        r = 42;
+                        zi = 1;
+                    } else if (keyWords == 4) {
+                        r = 44;
+                        zi = 1;
+                    } else {
+                        throw new IllegalArgumentException();
+                    }
+                }else{
+                    throw new IllegalArgumentException();
+                }
+                break;
+            case 96:
+                mask=0x0000FFFFFFFFFFFFL;
+                if(flag) {
+                    if (keyWords == 2) {
+                        r = 52;
+                        zi = 2;
+                    } else if (keyWords == 3) {
+                        r = 54;
+                        zi = 2;
+                    } else {
+                        throw new IllegalArgumentException();
+                    }
+                }else{
+                    throw new IllegalArgumentException();
+                }
+                break;
+            case 128:
+                mask=0xFFFFFFFFFFFFFFFFL;
+                if(flag) {
+                    if (keyWords == 2) {
+                        r = 68;
+                        zi = 2;
+                    } else if (keyWords == 3) {
+                        r = 69;
+                        zi = 2;
+                    } else if(keyWords==4){
+                        r=72;
+                        zi=2;
+                    } else {
+                        throw new IllegalArgumentException();
+                    }
+                }else{
+                    throw new IllegalArgumentException();
+                }
+                break;
+            default:
+                throw new IllegalArgumentException();
         }
-
-        return keyWords;
+        zi=zi+keyWords-2;
+        if(mode==0) {
+            this.input = pad.addPKCS5Padding(input);
+        }else{
+            this.input=input;
+        }
+        c=mask-3;
+        makeKeys();
+//        System.out.println(Arrays.toString(keys));
     }
-
-    private long leftRotate(long value, int shift, int size) {
-        return ((value << shift) | (value >>> (size - shift))) & MASK;
-    }
-
-    private long rightRotate(long value, int shift, int size) {
-        return ((value >>> shift) | (value << (size - shift))) & MASK;
-    }
-
-    private long[] roundFunction(long[] input, long roundKey) {
-        long[] output = new long[2];
-        output[0] = (leftRotate(input[0], 2, 64) & leftRotate(input[0], 13, 64)) ^ leftRotate(input[0], 22, 64);
-        output[0] = output[0] ^ input[1] ^ roundKey;
-        output[1] = leftRotate(input[1], 1, 64) ^ leftRotate(input[1], 10, 64) ^ leftRotate(input[1], 31, 64);
-
-        return output;
-    }
-
-    public byte[] encrypt(byte[] plaintext) {
-        int blockSize = 16; // 128 bits
-        long[] block = new long[2];
-        long[] ciphertext = new long[2];
-
-        System.out.println("Encryption:");
-
-        for (int i = 0; i < plaintext.length - 16; i += blockSize) {
-            block[0] = ((plaintext[i] & 0xFFL) << 56) | ((plaintext[i + 1] & 0xFFL) << 48) | ((plaintext[i + 2] & 0xFFL) << 40) | ((plaintext[i + 3] & 0xFFL) << 32)
-                    | ((plaintext[i + 4] & 0xFFL) << 24) | ((plaintext[i + 5] & 0xFFL) << 16) | ((plaintext[i + 6] & 0xFFL) << 8) | (plaintext[i + 7] & 0xFFL);
-            block[1] = ((plaintext[i + 8] & 0xFFL) << 56) | ((plaintext[i + 9] & 0xFFL) << 48) | ((plaintext[i + 10] & 0xFFL) << 40) | ((plaintext[i + 11] & 0xFFL) << 32)
-                    | ((plaintext[i + 12] & 0xFFL) << 24) | ((plaintext[i + 13] & 0xFFL) << 16) | ((plaintext[i + 14] & 0xFFL) << 8) | (plaintext[i + 15] & 0xFFL);
-
-            System.out.println("Block " + (i / blockSize + 1) + " before encryption: " + blockToString(block));
-
-            for (int round = 0; round < rounds; round++) {
-                long[] tempBlock = block.clone();
-                block[0] = block[1];
-                block[1] = tempBlock[0] ^ roundFunction(tempBlock, key[round])[0];
+    private void makeKeys(){
+        keys=new long[r];
+        for(int i=0;i<keyWords;i++){
+            keys[i]=Utilities.bytesToLong(keyInitial,(keyWords-i-1)*sizeBytes/2,sizeBytes/2);
+        }
+        for(int i=keyWords;i<r;i++){
+            long temp=Utilities.rotateRight(keys[i-1],3,sizeBits/2);
+            temp=temp&mask;
+            if(keyWords==4){
+                temp^=keys[i-3];
             }
-
-            ciphertext[0] = block[0];
-            ciphertext[1] = block[1];
-
-            System.out.println("Block " + (i / blockSize + 1) + " after encryption: " + blockToString(ciphertext));
-            System.out.println();
+            temp=temp^Utilities.rotateRight(temp,1,sizeBits/2);
+            keys[i]=temp^keys[i-keyWords]^z[zi][(i-keyWords)%62]^c;
         }
-
-        return plaintext;
     }
-
-    public byte[] decrypt(byte[] ciphertext) {
-        int blockSize = 16; // 128 bits
-        long[] block = new long[2];
-        long[] plaintext = new long[2];
-
-        System.out.println("Decryption:");
-
-        for (int i = 0; i < ciphertext.length - 16; i += blockSize) {
-            block[0] = ((ciphertext[i] & 0xFFL) << 56) | ((ciphertext[i + 1] & 0xFFL) << 48) | ((ciphertext[i + 2] & 0xFFL) << 40) | ((ciphertext[i + 3] & 0xFFL) << 32)
-                    | ((ciphertext[i + 4] & 0xFFL) << 24) | ((ciphertext[i + 5] & 0xFFL) << 16) | ((ciphertext[i + 6] & 0xFFL) << 8) | (ciphertext[i + 7] & 0xFFL);
-            block[1] = ((ciphertext[i + 8] & 0xFFL) << 56) | ((ciphertext[i + 9] & 0xFFL) << 48) | ((ciphertext[i + 10] & 0xFFL) << 40) | ((ciphertext[i + 11] & 0xFFL) << 32)
-                    | ((ciphertext[i + 12] & 0xFFL) << 24) | ((ciphertext[i + 13] & 0xFFL) << 16) | ((ciphertext[i + 14] & 0xFFL) << 8) | (ciphertext[i + 15] & 0xFFL);
-
-            System.out.println("Block " + (i / blockSize + 1) + " before decryption: " + blockToString(block));
-
-            for (int round = rounds - 1; round >= 0; round--) {
-                long[] tempBlock = block.clone();
-                block[1] = block[0];
-                block[0] = tempBlock[1] ^ roundFunction(tempBlock, key[round])[0];
+    byte[] encrypt(){
+        byte[] out=new byte[input.length];
+        int l=input.length/sizeBytes;
+        for(int i=0;i<l;i++){
+            long x=Utilities.bytesToLong(input,2*i*sizeBytes/2,sizeBytes/2);
+            long y=Utilities.bytesToLong(input,(2*i+1)*sizeBytes/2,sizeBytes/2);
+//            System.out.println(x+" "+y);
+            for(int j=0;j<r;j++){
+                long temp=x;
+                x=(y^((Utilities.rotateLeft(x,1,sizeBits/2)&Utilities.rotateLeft(x,8,sizeBits/2))^Utilities.rotateLeft(x,2,sizeBits/2)^keys[j]));
+                x=x&mask;
+                y=temp;
             }
-
-            plaintext[0] = block[0];
-            plaintext[1] = block[1];
-
-            System.out.println("Block " + (i / blockSize + 1) + " after decryption: " + blockToString(plaintext));
-            System.out.println();
+//            System.out.println(x+" "+y);
+            Utilities.longToBytes(x,out,sizeBytes/2,(2*i+1)*sizeBytes/2-1);
+            Utilities.longToBytes(y,out,sizeBytes/2,(2*i+2)*sizeBytes/2-1);
         }
-
-        return ciphertext;
+        input=out;
+//        printBytes(encryted);
+//        return out;
+//        return pad.removePKCS5Padding(out);
+        return out;
     }
-
-    private String blockToString(long[] block) {
-        return String.format("%016X %016X", block[0], block[1]);
-    }
-
-    public static void main(String[] args) {
-        try {
-            File file = new File("file.txt");
-            FileInputStream fileInputStream = new FileInputStream(file);
-
-            byte[] fileContent = new byte[(int) file.length()];
-            fileInputStream.read(fileContent);
-
-            fileInputStream.close();
-
-            BigInteger key = new BigInteger("00112233445566778899AABBCCDDEEFF", 16);
-            int rounds = 32;
-
-            SimonCipher simon = new SimonCipher(key, rounds);
-
-            // Пример использования для шифрования
-            System.out.println("Plaintext: " + new String(fileContent));
-            byte[] ciphertext = simon.encrypt(fileContent);
-            System.out.println("Ciphertext: " + new String(ciphertext));
-
-            // Пример использования для дешифрования
-            byte[] decryptedText = simon.decrypt(ciphertext);
-            System.out.println("Decrypted text: " + new String(decryptedText));
-        } catch (IOException e) {
-            e.printStackTrace();
+    byte[] decrypt(){
+//        byte[] input=encryted;
+        byte[] out=new byte[input.length];
+        int l=input.length/sizeBytes;
+        for(int i=0;i<l;i++){
+            long x= Utilities.bytesToLong(input,2*i*sizeBytes/2,sizeBytes/2);
+            long y=Utilities.bytesToLong(input,(2*i+1)*sizeBytes/2,sizeBytes/2);
+            for(int j=r-1;j>=0;j--){
+                long temp=y;
+                y=(x^((Utilities.rotateLeft(y,1,sizeBits/2)&Utilities.rotateLeft(y,8,sizeBits/2))^Utilities.rotateLeft(y,2,sizeBits/2)^keys[j]));
+                y=y&mask;
+                x=temp;
+            }
+            Utilities.longToBytes(x,out,sizeBytes/2,(2*i+1)*sizeBytes/2-1);
+            Utilities.longToBytes(y,out,sizeBytes/2,(2*i+2)*sizeBytes/2-1);
         }
+//        return out;
+        return pad.removePKCS5Padding(out);
+    }
+    private static void printBytes(final byte[] data) {
+        for (int i = 0; i < data.length; i++) {
+            System.out.printf("%02X ", data[i]);
+        }
+        System.out.println();
     }
 }

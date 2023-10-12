@@ -10,7 +10,7 @@ public class Main {
         VernamCipher vernamCipher = new VernamCipher();
         String key = vernamCipher.generateKey(newString.length());
         String wordCipher = vernamCipher.encrypt(newString, key);
-        System.out.println(wordCipher);
+        System.out.println("encrypted: " + wordCipher);
         String dexWordCipher = vernamCipher.decrypt(wordCipher, key);
         System.out.println(dexWordCipher);
     }
